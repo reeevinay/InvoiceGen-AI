@@ -266,20 +266,19 @@ This project demonstrates practical implementation of:
 
 ---
 
-## 👨‍💻 Author
+## 👨‍💻 Team / Authors
 
-**Yash Rajveer Singh**
+This is a team project developed by:
+- **Vinay Sharma**
+- **Yash Rajveer Singh**
+- **Utkarsh Singh**
+- **Yogesh Singh Rajput**
 
-Pre-Final Year B.Tech (Information Technology)
-
-### Skills
-- React.js
-- Tailwind CSS
-- Node.js
-- Express.js
-- MongoDB
-- SQL
-- REST APIs
+### Tech Stack & Skills
+- React.js & Tailwind CSS
+- Node.js & Express.js
+- MongoDB & Mongoose
+- REST APIs & Google Gemini AI Integration
 
 ---
 
