@@ -11,6 +11,7 @@ import productRoutes from "./routes/productRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import aiRoutes from "./routes/aiRoutes.js";
 
 
 
@@ -37,6 +38,7 @@ app.use( "/api/product", productRoutes);
 app.use( "/api/user",userRoutes);
 app.use( "/api/profile",profileRoutes);
 app.use("/api/dashboard",dashboardRoutes);
+app.use("/api/ai", aiRoutes);
 
 
 

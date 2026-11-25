@@ -43,11 +43,11 @@ const Login = () => {
             </div>
 
             <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900">
-              Sign in to StockPilot
+              Sign in to InvoiceGen AI
             </h1>
 
             <p className="text-sm text-slate-500 mt-1.5">
-              Enter your credentials to access your inventory workspace
+              Smart Billing, Inventory &amp; Analytics Workspace
             </p>
           </div>
 

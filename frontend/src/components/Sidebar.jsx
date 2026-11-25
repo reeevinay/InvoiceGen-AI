@@ -46,7 +46,7 @@ const Sidebar = () => {
           <FaCubes className="text-lg" />
         </div>
         <span className="hidden md:block text-lg font-bold tracking-tight text-white">
-          StockPilot
+          InvoiceGen AI
         </span>
       </div>
 

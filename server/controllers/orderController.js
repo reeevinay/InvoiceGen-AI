@@ -19,7 +19,7 @@ const restoreStockForOrder = async (order) => {
 // Add Order
 const addOrder = async (req, res) => {
   try {
-    const { customerName, totalAmount, status, items } = req.body;
+    const { customerName, totalAmount, status, items, taxRate = 0 } = req.body;
 
     if (!customerName || !customerName.trim()) {
       return res.status(400).json({
@@ -28,11 +28,14 @@ const addOrder = async (req, res) => {
       });
     }
 
+    const numericTaxRate = Math.min(100, Math.max(0, Number(taxRate) || 0));
+    let subtotal = Number(totalAmount || 0);
+    let taxAmount = 0;
     let computedTotal = Number(totalAmount || 0);
     const normalizedItems = [];
 
     if (Array.isArray(items) && items.length > 0) {
-      computedTotal = 0;
+      subtotal = 0;
 
       // Validate stock first before mutating any product
       for (const item of items) {
@@ -65,8 +68,11 @@ const addOrder = async (req, res) => {
           quantity: qty,
           price: product.price,
         });
-        computedTotal += product.price * qty;
+        subtotal += product.price * qty;
       }
+
+      taxAmount = Number(((subtotal * numericTaxRate) / 100).toFixed(2));
+      computedTotal = Number((subtotal + taxAmount).toFixed(2));
 
       if (status !== "Cancelled") {
         for (const item of normalizedItems) {
@@ -83,6 +89,9 @@ const addOrder = async (req, res) => {
     const order = new Order({
       customerName: customerName.trim(),
       items: normalizedItems,
+      subtotal,
+      taxRate: numericTaxRate,
+      taxAmount,
       totalAmount: computedTotal,
       status: status || "Pending",
     });
