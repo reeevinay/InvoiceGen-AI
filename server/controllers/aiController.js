@@ -8,10 +8,11 @@ const localParseInvoice = (prompt, products) => {
   const text = prompt || "";
   const lower = text.toLowerCase();
 
-  // Extract customer name (e.g., "for Rahul Sharma", "bill Priya", "customer: Amit")
+  // Extract customer name (e.g., "for Rahul Sharma", "bill Priya", "Utkarsh Singh bought...")
   let customerName = "";
   const custMatch =
-    text.match(/(?:bill|invoice|customer|for)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)/i);
+    text.match(/(?:bill|invoice|customer|for)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)/i) ||
+    text.match(/^([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)\s+(?:bought|ordered|purchased)\b/i);
   if (custMatch && !["for", "to", "a", "an", "the"].includes(custMatch[1].toLowerCase())) {
     customerName = custMatch[1].trim();
   }
@@ -31,7 +32,6 @@ const localParseInvoice = (prompt, products) => {
   for (const p of products) {
     const pName = p.productName.toLowerCase();
     const escaped = pName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // Match singular/plural simple variants
     const pattern = new RegExp(`(\\d+)\\s*(?:x\\s*)?${escaped}s?\\b|\\b${escaped}s?\\s*(?:x|\\*)\\s*(\\d+)`, "i");
     const m = text.match(pattern);
     if (m) {
@@ -42,7 +42,25 @@ const localParseInvoice = (prompt, products) => {
     }
   }
 
-  return { customerName, status, taxRate, items };
+  // Fallback for custom/non-catalog items (e.g., "4 Chaap costing 160 each")
+  let customAmount = 0;
+  const unmatchedItems = [];
+  if (items.length === 0) {
+    const unitMatch = text.match(/(\d+)\s+([a-zA-Z][a-zA-Z0-9\s-]{1,30}?)\s+(?:costing|at|@|for)\s*(?:rs\.?|inr|₹)?\s*(\d+(?:\.\d+)?)\s*(?:each|per\s+unit)?/i);
+    if (unitMatch) {
+      const qty = Number(unitMatch[1]);
+      const unitPrice = Number(unitMatch[3]);
+      customAmount = Number((qty * unitPrice).toFixed(2));
+      unmatchedItems.push(`${qty} × ${unitMatch[2].trim()} @ ₹${unitPrice}`);
+    } else {
+      const totalMatch = text.match(/(?:total|amount|worth|for)\s*(?:rs\.?|inr|₹)?\s*(\d+(?:\.\d+)?)/i);
+      if (totalMatch) {
+        customAmount = Number(totalMatch[1]);
+      }
+    }
+  }
+
+  return { customerName, status, taxRate, items, customAmount, unmatchedItems };
 };
 
 // POST /api/ai/parse-invoice
@@ -77,6 +95,8 @@ export const parseInvoicePrompt = async (req, res) => {
             customerName: { type: "STRING" },
             status: { type: "STRING", enum: ["Pending", "Delivered", "Cancelled"] },
             taxRate: { type: "NUMBER" },
+            customAmount: { type: "NUMBER" },
+            unmatchedItems: { type: "ARRAY", items: { type: "STRING" } },
             items: {
               type: "ARRAY",
               items: {
@@ -89,12 +109,12 @@ export const parseInvoicePrompt = async (req, res) => {
               },
             },
           },
-          required: ["customerName", "status", "taxRate", "items"],
+          required: ["customerName", "status", "taxRate", "items", "customAmount", "unmatchedItems"],
         };
 
         parsed = await callGemini({
           systemInstruction:
-            "You extract structured invoice data from natural language using ONLY productIds from the provided catalog. Never invent productIds or prices.",
+            "You extract structured invoice data from natural language. Match products ONLY to productIds from the provided catalog. If the user mentions items NOT in the catalog with prices/quantities (e.g. '4 Chaap costing 160 each'), put them in unmatchedItems and calculate their total in customAmount (e.g. 640). Otherwise set customAmount to 0 and unmatchedItems to [].",
           prompt: `Catalog:\n${catalogContext}\n\nUser request:\n"${prompt}"`,
           responseSchema: schema,
         });
@@ -130,12 +150,21 @@ export const parseInvoicePrompt = async (req, res) => {
     }
 
     const taxRate = Math.min(100, Math.max(0, Number(parsed.taxRate) || 0));
-    const subtotal = validatedItems.reduce(
-      (sum, i) => sum + i.price * i.quantity,
-      0
-    );
+    const subtotal =
+      validatedItems.length > 0
+        ? validatedItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
+        : Math.max(0, Number(parsed.customAmount) || 0);
     const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
     const totalAmount = Number((subtotal + taxAmount).toFixed(2));
+
+    if (validatedItems.length === 0 && (parsed.unmatchedItems?.length > 0 || subtotal > 0)) {
+      const desc = parsed.unmatchedItems?.length
+        ? parsed.unmatchedItems.join(", ")
+        : "Custom item";
+      warnings.push(
+        `Not in product catalog (${desc}) — filled Custom Total Amount (₹${totalAmount.toLocaleString()}) instead.`
+      );
+    }
 
     res.status(200).json({
       success: true,

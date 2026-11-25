@@ -95,6 +95,12 @@ const Orders = () => {
               quantity: i.quantity,
             }))
           );
+          setManualTotal("");
+        } else {
+          setLineItems([]);
+          setManualTotal(
+            draft.totalAmount > 0 ? String(draft.totalAmount) : ""
+          );
         }
         setAiWarnings(warnings || []);
         toast.success(
