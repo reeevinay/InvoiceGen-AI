@@ -27,8 +27,8 @@ const authMiddleware = async (req, res, next) => {
       process.env.JWT_SECRET
     );
 
-    // Find user
-    const user = await User.findById(decoded.id);
+    // Find user without exposing password hash
+    const user = await User.findById(decoded.id).select("-password");
 
     if (!user) {
       return res.status(404).json({
@@ -49,6 +49,20 @@ const authMiddleware = async (req, res, next) => {
       message: "Invalid or Expired Token",
     });
   }
+};
+
+export const requireRole = (...roles) => {
+  const allowed = roles.map((r) => r.toLowerCase());
+  return (req, res, next) => {
+    const userRole = req.user?.role?.toLowerCase();
+    if (!userRole || !allowed.includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: insufficient permissions",
+      });
+    }
+    next();
+  };
 };
 
 export default authMiddleware;

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { FaCubes, FaEye, FaEyeSlash } from "react-icons/fa";
+import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
 const Login = () => {
@@ -8,160 +9,102 @@ const Login = () => {
   const { login } = useAuth();
 
   const [email, setEmail] = useState("");
-  const [password, setPassword] =
-    useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const [error, setError] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const handleSubmit = async (
-    e
-  ) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-
-    console.log(
-      "Sending Login Data:",
-      {
-        email,
-        password,
-      }
-    );
-
     setLoading(true);
     setError("");
 
     try {
-      const response =
-        await axios.post(
-          "http://localhost:3000/api/auth/login",
-          {
-            email,
-            password,
-          }
-        );
+      const response = await api.post("/auth/login", { email, password });
 
-      console.log(
-        "Login Response:",
-        response.data
-      );
-
-      if (
-        response.data.success
-      ) {
-        login(
-          response.data.user,
-          response.data.token
-        );
-
-        const role =
-           response.data.user.role.toLowerCase();
-
-        if (
-          role ===
-          "admin"
-        ) {
-          navigate(
-            "/admin-dashboard"
-          );
-        } else {
-          navigate(
-            "/customer/dashboard"
-          );
-        }
+      if (response.data.success) {
+        login(response.data.user, response.data.token);
+        navigate("/admin-dashboard", { replace: true });
       }
     } catch (err) {
-      console.log(
-        "LOGIN ERROR:",
-        err.response?.data
-      );
-
-      setError(
-        err.response?.data
-          ?.message ||
-          "Login Failed"
-      );
+      setError(err.response?.data?.message || "Invalid email or password");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center px-4">
-
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
-
-        <div className="bg-white rounded-3xl shadow-2xl p-8">
-
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8">
           <div className="text-center mb-8">
-
-            <div className="w-16 h-16 mx-auto bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold">
-             Y
+            <div className="w-12 h-12 mx-auto bg-indigo-600 rounded-xl flex items-center justify-center text-white text-xl shadow-xs">
+              <FaCubes />
             </div>
 
-            <h1 className="mt-4 text-3xl font-bold text-gray-800">
-              Welcome Admin
+            <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900">
+              Sign in to StockPilot
             </h1>
 
-            <p className="text-gray-500 mt-2">
-              Login to your StockPilot Dashboard
+            <p className="text-sm text-slate-500 mt-1.5">
+              Enter your credentials to access your inventory workspace
             </p>
-
           </div>
 
-          <form
-            onSubmit={
-              handleSubmit
-            }
-            className="space-y-5"
-          >
-
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-
-              <label className="block mb-2 text-sm font-semibold text-gray-700">
-                Email
+              <label
+                htmlFor="login-email"
+                className="block mb-1.5 text-sm font-medium text-slate-700"
+              >
+                Email address
               </label>
-
               <input
+                id="login-email"
                 type="email"
-                placeholder="admin@gmail.com"
+                autoComplete="email"
+                placeholder="name@company.com"
                 value={email}
-                onChange={(e) =>
-                  setEmail(
-                    e.target.value
-                  )
-                }
+                onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 border rounded-xl"
+                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
               />
-
             </div>
 
             <div>
-
-              <label className="block mb-2 text-sm font-semibold text-gray-700">
+              <label
+                htmlFor="login-password"
+                className="block mb-1.5 text-sm font-medium text-slate-700"
+              >
                 Password
               </label>
-
-              <input
-                type="password"
-                placeholder="Enter Password"
-                value={password}
-                onChange={(e) =>
-                  setPassword(
-                    e.target.value
-                  )
-                }
-                required
-                className="w-full px-4 py-3 border rounded-xl"
-              />
-
+              <div className="relative">
+                <input
+                  id="login-password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2.5 pr-10 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </button>
+              </div>
             </div>
 
             {error && (
-              <div className="bg-red-100 text-red-700 p-3 rounded-lg">
+              <div
+                role="alert"
+                className="bg-rose-50 border border-rose-200 text-rose-700 px-3.5 py-2.5 rounded-xl text-sm"
+              >
                 {error}
               </div>
             )}
@@ -169,19 +112,13 @@ const Login = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-xl bg-indigo-600 text-white font-semibold"
+              className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition disabled:opacity-60"
             >
-              {loading
-                ? "Logging In..."
-                : "Login"}
+              {loading ? "Signing in..." : "Sign in"}
             </button>
-
           </form>
-
         </div>
-
       </div>
-
     </div>
   );
 };

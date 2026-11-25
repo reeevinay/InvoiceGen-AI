@@ -7,56 +7,37 @@ const login = async (
   res
 ) => {
   try {
-    console.log(
-      "BODY:",
-      req.body
-    );
+    const { email, password } = req.body;
 
-    const {
-      email,
-      password,
-    } = req.body;
-
-    const user =
-      await User.findOne({
-        email,
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required",
       });
+    }
 
-    console.log(
-      "USER:",
-      user
-    );
+    const user = await User.findOne({ email });
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message:
-          "Invalid User",
+        message: "Invalid credentials",
       });
     }
 
-    if (!password) {
-      return res.status(400).json({
+    if (user.status === "Inactive") {
+      return res.status(403).json({
         success: false,
-        message:
-          "Password Missing",
+        message: "Account is inactive. Contact an administrator.",
       });
     }
-console.log("Password entered:", password);
-console.log("Hash in DB:", user.password);
 
-const isMatch = await bcrypt.compare(
-  password,
-  user.password
-);
-
-console.log("isMatch =", isMatch);
+    const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message:
-          "Invalid Credentials",
+        message: "Invalid credentials",
       });
     }
 

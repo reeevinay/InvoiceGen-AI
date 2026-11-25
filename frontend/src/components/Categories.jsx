@@ -1,37 +1,34 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import { FaEdit, FaTrash, FaSearch, FaTable } from "react-icons/fa";
+import api from "../api/client";
+import { useToast } from "./ui/ToastContext";
+import ConfirmModal from "./ui/ConfirmModal";
+import { EmptyState, ErrorBanner, LoadingState, PageHeader } from "./ui/StateViews";
 
 const Categories = () => {
+  const toast = useToast();
+
   const [categoryName, setCategoryName] = useState("");
   const [categoryDescription, setCategoryDescription] = useState("");
   const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(false);
-
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const [editId, setEditId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
-  // ==========================
-  // Fetch Categories
-  // ==========================
   const fetchCategories = async () => {
     try {
       setLoading(true);
-
-      const response = await axios.get(
-        "http://localhost:3000/api/category",
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "pos-token"
-            )}`,
-          },
-        }
-      );
-
+      setError("");
+      const response = await api.get("/category");
       if (response.data.success) {
-        setCategories(response.data.categories);
+        setCategories(response.data.categories || []);
       }
-    } catch (error) {
-      console.error("Error fetching categories:", error);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to load categories");
     } finally {
       setLoading(false);
     }
@@ -41,382 +38,256 @@ const Categories = () => {
     fetchCategories();
   }, []);
 
-  // ==========================
-  // Add / Update Category
-  // ==========================
+  const resetForm = () => {
+    setCategoryName("");
+    setCategoryDescription("");
+    setEditId(null);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     try {
-      let response;
-
+      setSaving(true);
       if (editId) {
-        // Update Category
-
-        response = await axios.put(
-          `http://localhost:3000/api/category/${editId}`,
-          {
-            categoryName,
-            categoryDescription,
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem(
-                "pos-token"
-              )}`,
-            },
-          }
-        );
-
-        alert("Category Updated Successfully");
+        const res = await api.put(`/category/${editId}`, {
+          categoryName,
+          categoryDescription,
+        });
+        if (res.data.success) {
+          toast.success("Category updated successfully");
+        }
       } else {
-        // Add Category
-
-        response = await axios.post(
-          "http://localhost:3000/api/category/add",
-          {
-            categoryName,
-            categoryDescription,
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem(
-                "pos-token"
-              )}`,
-            },
-          }
-        );
-
-        alert("Category Added Successfully");
+        const res = await api.post("/category/add", {
+          categoryName,
+          categoryDescription,
+        });
+        if (res.data.success) {
+          toast.success("Category added successfully");
+        }
       }
-
-      if (response.data.success) {
-        setCategoryName("");
-        setCategoryDescription("");
-        setEditId(null);
-
-        fetchCategories();
-      }
-    } catch (error) {
-      console.error(error);
-
-      alert(
-        error.response?.data?.message ||
-          "Something went wrong"
-      );
+      resetForm();
+      fetchCategories();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to save category");
+    } finally {
+      setSaving(false);
     }
   };
 
-  // ==========================
-  // Edit Category
-  // ==========================
-const handleEdit = (category) => {
-  console.log("Edit Clicked:", category);
+  const handleEdit = (category) => {
+    setCategoryName(category.categoryName);
+    setCategoryDescription(category.categoryDescription);
+    setEditId(category._id);
+  };
 
-  setCategoryName(category.categoryName);
-  setCategoryDescription(
-    category.categoryDescription
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      setDeleting(true);
+      const response = await api.delete(`/category/${deleteTarget._id}`);
+      if (response.data.success) {
+        toast.success("Category deleted");
+        if (editId === deleteTarget._id) resetForm();
+        fetchCategories();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete category");
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  const filteredCategories = categories.filter(
+    (c) =>
+      c.categoryName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.categoryDescription?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  setEditId(category._id);
-};
+  if (loading) return <LoadingState label="Loading categories..." />;
 
-  // ==========================
-  // Delete Category
-  // ==========================
-  const handleDelete = async (id) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this category?"
-    );
-
-    if (!confirmDelete) return;
-
-    try {
-      const response = await axios.delete(
-        `http://localhost:3000/api/category/${id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "pos-token"
-            )}`,
-          },
+  return (
+    <div>
+      <PageHeader
+        title="Categories"
+        subtitle="Organize your product catalog into structured categories"
+        action={
+          <div className="bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl text-sm">
+            <span className="text-slate-500 mr-2">Total:</span>
+            <span className="font-bold text-slate-900 tabular-nums">
+              {categories.length}
+            </span>
+          </div>
         }
-      );
+      />
 
-      if (response.data.success) {
-        alert("Category Deleted");
-        fetchCategories();
-      }
-    } catch (error) {
-      console.error(error);
+      <ErrorBanner message={error} onRetry={fetchCategories} />
 
-      alert(
-        error.response?.data?.message ||
-          "Delete failed"
-      );
-    }
-  };
-
-  // ==========================
-  // Loading
-  // ==========================
-  if (loading) {
-    return (
-      <div className="text-center mt-10 text-xl">
-        Loading...
-      </div>
-    );
-  }
-return (
-  <div className="min-h-screen bg-slate-100 p-4 md:p-6">
-
-    {/* Header */}
-    <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-lg mb-6">
-
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-
-        <div>
-          <h1 className="text-3xl md:text-4xl font-bold">
-            Categories Management
-          </h1>
-
-          <p className="text-blue-100 mt-2">
-            Manage your product categories efficiently
-          </p>
-        </div>
-
-        <div className="bg-white/20 px-5 py-3 rounded-2xl backdrop-blur-sm">
-          <p className="text-sm">
-            Total Categories
-          </p>
-
-          <h2 className="text-3xl font-bold">
-            {categories.length}
-          </h2>
-        </div>
-
-      </div>
-
-    </div>
-
-    {/* Main Content */}
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-      {/* Form Section */}
-      <div className="lg:col-span-1">
-
-        <div className="bg-white rounded-3xl shadow-lg p-6">
-
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">
-            {editId
-              ? "Update Category"
-              : "Add New Category"}
-          </h2>
-
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-5"
-          >
-
-            <div>
-              <label className="block text-gray-600 mb-2">
-                Category Name
-              </label>
-
-              <input
-                type="text"
-                placeholder="Enter category name"
-                value={categoryName}
-                onChange={(e) =>
-                  setCategoryName(
-                    e.target.value
-                  )
-                }
-                required
-                className="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-gray-600 mb-2">
-                Description
-              </label>
-
-              <textarea
-                rows="5"
-                placeholder="Enter category description"
-                value={categoryDescription}
-                onChange={(e) =>
-                  setCategoryDescription(
-                    e.target.value
-                  )
-                }
-                required
-                className="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3 rounded-xl font-semibold transition"
-            >
-              {editId
-                ? "Update Category"
-                : "Add Category"}
-            </button>
-
-            {editId && (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditId(null);
-                  setCategoryName("");
-                  setCategoryDescription("");
-                }}
-                className="w-full bg-gray-500 hover:bg-gray-600 text-white py-3 rounded-xl font-semibold"
-              >
-                Cancel Edit
-              </button>
-            )}
-
-          </form>
-
-        </div>
-
-      </div>
-
-      {/* Category List */}
-      <div className="lg:col-span-2">
-
-        <div className="bg-white rounded-3xl shadow-lg p-6">
-
-          <div className="flex justify-between items-center mb-6">
-
-            <h2 className="text-2xl font-bold text-gray-800">
-              Categories List
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Form */}
+        <div className="lg:col-span-1">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs p-6">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">
+              {editId ? "Edit Category" : "Add New Category"}
             </h2>
 
-            <span className="bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-semibold">
-              {categories.length} Records
-            </span>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="cat-name"
+                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                >
+                  Category Name
+                </label>
+                <input
+                  id="cat-name"
+                  type="text"
+                  placeholder="e.g., Electronics"
+                  value={categoryName}
+                  onChange={(e) => setCategoryName(e.target.value)}
+                  required
+                  className="w-full border border-slate-300 px-3.5 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                />
+              </div>
 
+              <div>
+                <label
+                  htmlFor="cat-desc"
+                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                >
+                  Description
+                </label>
+                <textarea
+                  id="cat-desc"
+                  rows="4"
+                  placeholder="Brief description of this category"
+                  value={categoryDescription}
+                  onChange={(e) => setCategoryDescription(e.target.value)}
+                  required
+                  className="w-full border border-slate-300 px-3.5 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-sm font-semibold transition disabled:opacity-60"
+                >
+                  {saving
+                    ? "Saving..."
+                    : editId
+                    ? "Update Category"
+                    : "Add Category"}
+                </button>
+
+                {editId && (
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="w-full border border-slate-300 text-slate-700 hover:bg-slate-50 py-2.5 rounded-xl text-sm font-medium transition"
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
+            </form>
           </div>
-
-          {categories.length === 0 ? (
-            <div className="text-center py-10">
-
-              <h3 className="text-xl font-semibold text-gray-700">
-                No Categories Found
-              </h3>
-
-              <p className="text-gray-500 mt-2">
-                Add your first category to get started.
-              </p>
-
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-
-              <table className="w-full">
-
-                <thead>
-
-                  <tr className="bg-slate-100">
-
-                    <th className="p-4 text-left">
-                      #
-                    </th>
-
-                    <th className="p-4 text-left">
-                      Category Name
-                    </th>
-
-                    <th className="p-4 text-left">
-                      Description
-                    </th>
-
-                    <th className="p-4 text-center">
-                      Actions
-                    </th>
-
-                  </tr>
-
-                </thead>
-
-                <tbody>
-
-                  {categories.map(
-                    (category, index) => (
-                      <tr
-                        key={category._id}
-                        className="border-b hover:bg-slate-50 transition"
-                      >
-
-                        <td className="p-4">
-                          {index + 1}
-                        </td>
-
-                        <td className="p-4 font-semibold text-gray-700">
-                          {
-                            category.categoryName
-                          }
-                        </td>
-
-                        <td className="p-4 text-gray-500">
-                          {
-                            category.categoryDescription
-                          }
-                        </td>
-
-                        <td className="p-4">
-
-                          <div className="flex justify-center gap-2">
-
-                            <button
-                              onClick={() =>
-                                handleEdit(
-                                  category
-                                )
-                              }
-                              className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg"
-                            >
-                              Edit
-                            </button>
-
-                            <button
-                              onClick={() =>
-                                handleDelete(
-                                  category._id
-                                )
-                              }
-                              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg"
-                            >
-                              Delete
-                            </button>
-
-                          </div>
-
-                        </td>
-
-                      </tr>
-                    )
-                  )}
-
-                </tbody>
-
-              </table>
-
-            </div>
-          )}
-
         </div>
 
+        {/* List */}
+        <div className="lg:col-span-2">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+              <h2 className="text-lg font-semibold text-slate-900">
+                All Categories
+              </h2>
+              <div className="relative w-full sm:w-64">
+                <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+                <input
+                  type="text"
+                  aria-label="Search categories"
+                  placeholder="Search categories..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3.5 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                />
+              </div>
+            </div>
+
+            {filteredCategories.length === 0 ? (
+              <EmptyState
+                icon={FaTable}
+                title="No categories found"
+                description={
+                  searchTerm
+                    ? "Try adjusting your search query."
+                    : "Create your first category using the form on the left."
+                }
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
+                      <th className="py-3 pr-4 font-semibold">#</th>
+                      <th className="py-3 pr-4 font-semibold">Name</th>
+                      <th className="py-3 pr-4 font-semibold">Description</th>
+                      <th className="py-3 text-right font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredCategories.map((cat, idx) => (
+                      <tr key={cat._id} className="hover:bg-slate-50">
+                        <td className="py-3 pr-4 text-slate-500 tabular-nums">
+                          {idx + 1}
+                        </td>
+                        <td className="py-3 pr-4 font-medium text-slate-900">
+                          {cat.categoryName}
+                        </td>
+                        <td className="py-3 pr-4 text-slate-600 max-w-xs truncate">
+                          {cat.categoryDescription}
+                        </td>
+                        <td className="py-3 text-right">
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(cat)}
+                              aria-label={`Edit ${cat.categoryName}`}
+                              className="p-2 rounded-lg text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 transition"
+                            >
+                              <FaEdit />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(cat)}
+                              aria-label={`Delete ${cat.categoryName}`}
+                              className="p-2 rounded-lg text-slate-600 hover:text-rose-600 hover:bg-rose-50 transition"
+                            >
+                              <FaTrash />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        title="Delete Category"
+        message={`Are you sure you want to delete "${deleteTarget?.categoryName}"?`}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+        loading={deleting}
+      />
     </div>
-
-  </div>
-);
+  );
 };
 
 export default Categories;

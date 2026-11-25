@@ -1,5 +1,7 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import mongoose from "mongoose";
 import connectDB from "./db/connection.js";
 import authRoutes from "./routes/auth.js";
 import categoryRoutes from "./routes/category.js";
@@ -16,7 +18,16 @@ const app = express();
 
 
 
-app.use(cors());
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
+  : null;
+
+app.use(
+  cors({
+    origin: allowedOrigins ? allowedOrigins : true,
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use("/api/auth", authRoutes);   
 app.use("/api/category", categoryRoutes);
@@ -36,11 +47,21 @@ app.get("/", (req, res) => {
     res.send("Server Running");
 });
 
+app.get("/api/health", (req, res) => {
+    res.status(200).json({
+        ok: true,
+        dbConnected: mongoose.connection.readyState === 1,
+    });
+});
 
 
-app.listen(process.env.PORT, () => {
-    connectDB();
-    console.log("Server running on port 3000");
+
+const PORT = process.env.PORT || 3000;
+
+connectDB().then(() => {
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
 });
 
 

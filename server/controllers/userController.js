@@ -1,14 +1,25 @@
+import bcrypt from "bcrypt";
 import User from "../models/User.js";
+
+const sanitizeUser = (userDoc) => {
+  const obj = userDoc.toObject ? userDoc.toObject() : { ...userDoc };
+  delete obj.password;
+  return obj;
+};
 
 // Add User
 export const addUser = async (req, res) => {
   try {
-    const { name, email, phone, role, status } =
-      req.body;
+    const { name, email, password, phone, role, status } = req.body;
 
-    const existingUser =
-      await User.findOne({ email });
+    if (!name || !email || !password || !phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, email, password, and phone are required",
+      });
+    }
 
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -16,22 +27,24 @@ export const addUser = async (req, res) => {
       });
     }
 
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const user = await User.create({
       name,
       email,
+      password: hashedPassword,
       phone,
-      role,
-      status,
+      role: role || "Staff",
+      status: status || "Active",
     });
 
     res.status(201).json({
       success: true,
       message: "User Added Successfully",
-      user,
+      user: sanitizeUser(user),
     });
   } catch (error) {
     console.log(error);
-
     res.status(500).json({
       success: false,
       message: error.message,
@@ -42,7 +55,7 @@ export const addUser = async (req, res) => {
 // Get Users
 export const getUsers = async (req, res) => {
   try {
-    const users = await User.find();
+    const users = await User.find().select("-password").sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -50,7 +63,6 @@ export const getUsers = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-
     res.status(500).json({
       success: false,
       message: error.message,
@@ -61,14 +73,24 @@ export const getUsers = async (req, res) => {
 // Update User
 export const updateUser = async (req, res) => {
   try {
-    const user =
-      await User.findByIdAndUpdate(
-        req.params.id,
-        req.body,
-        {
-          new: true,
-        }
-      );
+    const { name, email, password, phone, role, status } = req.body;
+    const updateData = { name, email, phone, role, status };
+
+    if (password && password.trim().length > 0) {
+      updateData.password = await bcrypt.hash(password, 10);
+    }
+
+    const user = await User.findByIdAndUpdate(req.params.id, updateData, {
+      new: true,
+      runValidators: true,
+    }).select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -77,7 +99,6 @@ export const updateUser = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-
     res.status(500).json({
       success: false,
       message: error.message,
@@ -88,9 +109,20 @@ export const updateUser = async (req, res) => {
 // Delete User
 export const deleteUser = async (req, res) => {
   try {
-    await User.findByIdAndDelete(
-      req.params.id
-    );
+    if (req.user && req.user._id.toString() === req.params.id) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot delete your own active account",
+      });
+    }
+
+    const deleted = await User.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -98,7 +130,6 @@ export const deleteUser = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-
     res.status(500).json({
       success: false,
       message: error.message,

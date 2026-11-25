@@ -1,22 +1,24 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const Root = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) {
-      if (user.role === 'admin') {
-        navigate('/admin/dashboard');
-      } else if (user.role === 'customer') {
-        navigate('/customer/dashboard');
-      } else {
-        navigate('/login');
-      }
+    if (!user) {
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    const role = user.role?.toLowerCase();
+    if (role === "admin" || role === "manager" || role === "staff") {
+      navigate("/admin-dashboard", { replace: true });
+    } else if (role === "customer") {
+      navigate("/customer/dashboard", { replace: true });
     } else {
-      navigate('/login');
+      navigate("/login", { replace: true });
     }
   }, [user, navigate]);
 

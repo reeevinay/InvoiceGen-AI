@@ -1,491 +1,440 @@
-import React,
-{
-  useState,
-  useEffect,
-} from "react";
-
-import axios from "axios";
-
-
-
-import {
-  FaPlus,
-  FaEdit,
-  FaTrash,
-  FaSearch,
-} from "react-icons/fa";
+import React, { useState, useEffect } from "react";
+import { FaPlus, FaEdit, FaTrash, FaSearch, FaBoxOpen } from "react-icons/fa";
+import api from "../api/client";
+import { useToast } from "./ui/ToastContext";
+import ConfirmModal from "./ui/ConfirmModal";
+import { EmptyState, ErrorBanner, LoadingState, PageHeader } from "./ui/StateViews";
 
 const Products = () => {
- 
-const [products, setProducts] =
-  useState([]);
+  const toast = useToast();
 
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [showForm, setShowForm] = useState(false);
 
-const [productName, setProductName] = useState("");
-const [category, setCategory] = useState("");
-const [price, setPrice] = useState("");
-const [stock, setStock] = useState("");
-const [status, setStatus] = useState("In Stock");
+  const [productName, setProductName] = useState("");
+  const [category, setCategory] = useState("");
+  const [price, setPrice] = useState("");
+  const [stock, setStock] = useState("");
+  const [status, setStatus] = useState("In Stock");
 
-const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
-const [editId, setEditId] = useState(null);
-
-
-
-
-const filteredProducts =
-  products.filter(
-    (product) =>
-      product.productName
-        ?.toLowerCase()
-        .includes(
-          searchTerm.toLowerCase()
-        ) ||
-      product.category
-        ?.toLowerCase()
-        .includes(
-          searchTerm.toLowerCase()
-        )
-  );
-
- const handleSubmit = async (e) => {
-  e.preventDefault();
-
-  try {
-    const productData = {
-      productName,
-      category,
-      price,
-      stock,
-      status,
-    };
-
-    if (editId) {
-      // UPDATE PRODUCT
-      await axios.put(
-        `http://localhost:3000/api/product/${editId}`,
-        productData,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "pos-token"
-            )}`,
-          },
-        }
-      );
-    } else {
-      // ADD PRODUCT
-      await axios.post(
-        "http://localhost:3000/api/product/add",
-        productData,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "pos-token"
-            )}`,
-          },
-        }
-      );
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const [prodRes, catRes] = await Promise.all([
+        api.get("/product"),
+        api.get("/category"),
+      ]);
+      if (prodRes.data.success) setProducts(prodRes.data.products || []);
+      if (catRes.data.success) setCategories(catRes.data.categories || []);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to load products");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    fetchProducts();
+  useEffect(() => {
+    fetchData();
+  }, []);
 
+  const resetForm = () => {
     setShowForm(false);
     setEditId(null);
-
     setProductName("");
     setCategory("");
     setPrice("");
     setStock("");
     setStatus("In Stock");
-
-  } catch (error) {
-    console.log(error.response?.data || error);
-  }
-};
-
-const handleEdit = (product) => {
-  setProductName(
-  product.productName
-);
-  setCategory(product.category);
-  setPrice(product.price);
-  setStock(product.stock);
-  setStatus(product.status);
-
-  setEditId(product._id);
-  setShowForm(true);
-};
-
-const handleDelete =
-  async (id) => {
-    if (
-      !window.confirm(
-        "Delete Product?"
-      )
-    )
-      return;
-
-    try {
-      await axios.delete(
-        `http://localhost:3000/api/product/${id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "pos-token"
-            )}`,
-          },
-        }
-      );
-
-      fetchProducts();
-    } catch (error) {
-      console.log(error);
-    }
   };
 
-
-useEffect(() => {
-  fetchProducts();
-}, []);
-
-const fetchProducts =
-  async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     try {
-      const response =
-        await axios.get(
-          "http://localhost:3000/api/product",
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem(
-                "pos-token"
-              )}`,
-            },
-          }
-        );
+      setSaving(true);
+      const numericStock = Number(stock);
+      const productData = {
+        productName,
+        category,
+        price: Number(price),
+        stock: numericStock,
+        status: numericStock <= 0 ? "Out of Stock" : status,
+      };
 
-      if (
-        response.data.success
-      ) {
-        setProducts(
-          response.data.products
-        );
+      if (editId) {
+        await api.put(`/product/${editId}`, productData);
+        toast.success("Product updated successfully");
+      } else {
+        await api.post("/product/add", productData);
+        toast.success("Product added successfully");
       }
-    } catch (error) {
-      console.log(error);
+      resetForm();
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to save product");
+    } finally {
+      setSaving(false);
     }
   };
 
-return (
+  const handleEdit = (product) => {
+    setProductName(product.productName);
+    setCategory(product.category);
+    setPrice(product.price);
+    setStock(product.stock);
+    setStatus(product.status);
+    setEditId(product._id);
+    setShowForm(true);
+  };
 
-  <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      setDeleting(true);
+      await api.delete(`/product/${deleteTarget._id}`);
+      toast.success("Product deleted");
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete product");
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
 
-```
-{/* Header */}
-<div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-lg mb-6">
+  const filteredProducts = products.filter(
+    (product) =>
+      product.productName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.category?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+  if (loading) return <LoadingState label="Loading products..." />;
 
+  return (
     <div>
-      <h1 className="text-3xl md:text-4xl font-bold">
-        Products Management
-      </h1>
-
-      <p className="text-blue-100 mt-2">
-        Manage inventory products efficiently
-      </p>
-    </div>
-
-    <button
-      onClick={() => setShowForm(true)}
-      className="bg-white text-blue-600 hover:bg-gray-100 px-5 py-3 rounded-xl font-semibold flex items-center gap-2"
-    >
-      <FaPlus />
-      Add Product
-    </button>
-
-  </div>
-
-</div>
-
-{/* Stats Cards */}
-<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
-
-  <div className="bg-white rounded-2xl shadow-lg p-5">
-    <p className="text-gray-500">
-      Total Products
-    </p>
-    <h2 className="text-4xl font-bold text-blue-600 mt-2">
-      {products.length}
-    </h2>
-  </div>
-
-  <div className="bg-white rounded-2xl shadow-lg p-5">
-    <p className="text-gray-500">
-      In Stock
-    </p>
-    <h2 className="text-4xl font-bold text-green-600 mt-2">
-      {
-        products.filter(
-          (p) => p.status === "In Stock"
-        ).length
-      }
-    </h2>
-  </div>
-
-  <div className="bg-white rounded-2xl shadow-lg p-5">
-    <p className="text-gray-500">
-      Out Of Stock
-    </p>
-    <h2 className="text-4xl font-bold text-red-600 mt-2">
-      {
-        products.filter(
-          (p) => p.status === "Out of Stock"
-        ).length
-      }
-    </h2>
-  </div>
-
-</div>
-
-{/* Product Form */}
-{showForm && (
-  <div className="bg-white rounded-3xl shadow-lg p-6 mb-6">
-
-    <h2 className="text-2xl font-bold mb-6">
-      {editId
-        ? "Update Product"
-        : "Add Product"}
-    </h2>
-
-    <form
-      onSubmit={handleSubmit}
-      className="grid grid-cols-1 md:grid-cols-2 gap-4"
-    >
-
-      <input
-        type="text"
-        placeholder="Product Name"
-        value={productName}
-        onChange={(e) =>
-          setProductName(e.target.value)
+      <PageHeader
+        title="Products"
+        subtitle="Manage SKUs, pricing, category assignments, and stock levels"
+        action={
+          <button
+            type="button"
+            onClick={() => {
+              resetForm();
+              setShowForm(true);
+            }}
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-xs transition"
+          >
+            <FaPlus className="text-xs" />
+            Add Product
+          </button>
         }
-        className="border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-        required
       />
 
-      <input
-        type="text"
-        placeholder="Category"
-        value={category}
-        onChange={(e) =>
-          setCategory(e.target.value)
-        }
-        className="border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-        required
-      />
+      <ErrorBanner message={error} onRetry={fetchData} />
 
-      <input
-        type="number"
-        placeholder="Price"
-        value={price}
-        onChange={(e) =>
-          setPrice(e.target.value)
-        }
-        className="border border-gray-300 p-3 rounded-xl"
-        required
-      />
-
-      <input
-        type="number"
-        placeholder="Stock"
-        value={stock}
-        onChange={(e) =>
-          setStock(e.target.value)
-        }
-        className="border border-gray-300 p-3 rounded-xl"
-        required
-      />
-
-      <select
-        value={status}
-        onChange={(e) =>
-          setStatus(e.target.value)
-        }
-        className="border border-gray-300 p-3 rounded-xl"
-      >
-        <option>In Stock</option>
-        <option>Out of Stock</option>
-      </select>
-
-      <div className="flex gap-3">
-
-        <button
-          type="submit"
-          className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl"
-        >
-          {editId
-            ? "Update"
-            : "Save"}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setShowForm(false);
-            setEditId(null);
-          }}
-          className="bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-xl"
-        >
-          Cancel
-        </button>
-
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+            Total Products
+          </p>
+          <h2 className="text-2xl font-bold text-slate-900 mt-1.5 tabular-nums">
+            {products.length}
+          </h2>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+            In Stock
+          </p>
+          <h2 className="text-2xl font-bold text-emerald-600 mt-1.5 tabular-nums">
+            {products.filter((p) => p.status === "In Stock").length}
+          </h2>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+            Out of Stock
+          </p>
+          <h2 className="text-2xl font-bold text-rose-600 mt-1.5 tabular-nums">
+            {products.filter((p) => p.status === "Out of Stock").length}
+          </h2>
+        </div>
       </div>
 
-    </form>
+      {/* Form */}
+      {showForm && (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-xs p-6 mb-6">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">
+            {editId ? "Update Product" : "Add New Product"}
+          </h2>
 
-  </div>
-)}
-
-{/* Search */}
-<div className="bg-white rounded-2xl shadow-lg p-4 mb-6">
-
-  <div className="relative">
-
-    <FaSearch className="absolute left-4 top-4 text-gray-400" />
-
-    <input
-      type="text"
-      placeholder="Search Products..."
-      value={searchTerm}
-      onChange={(e) =>
-        setSearchTerm(e.target.value)
-      }
-      className="w-full pl-12 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-    />
-
-  </div>
-
-</div>
-
-{/* Products Table */}
-<div className="bg-white rounded-3xl shadow-lg overflow-hidden">
-
-  <div className="p-6 border-b">
-
-    <h2 className="text-2xl font-bold">
-      Products List
-    </h2>
-
-  </div>
-
-  <div className="overflow-x-auto">
-
-    <table className="w-full">
-
-      <thead className="bg-slate-100">
-
-        <tr>
-
-          <th className="px-6 py-4 text-left">ID</th>
-          <th className="px-6 py-4 text-left">Product</th>
-          <th className="px-6 py-4 text-left">Category</th>
-          <th className="px-6 py-4 text-left">Price</th>
-          <th className="px-6 py-4 text-left">Stock</th>
-          <th className="px-6 py-4 text-left">Status</th>
-          <th className="px-6 py-4 text-center">Actions</th>
-
-        </tr>
-
-      </thead>
-
-      <tbody>
-
-        {filteredProducts.map((product) => (
-
-          <tr
-            key={product._id}
-            className="border-b hover:bg-slate-50 transition"
+          <form
+            onSubmit={handleSubmit}
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
           >
-
-            <td className="px-6 py-4">
-              PRD-{product._id.slice(-5)}
-            </td>
-
-            <td className="px-6 py-4 font-semibold">
-              {product.productName}
-            </td>
-
-            <td className="px-6 py-4">
-              {product.category}
-            </td>
-
-            <td className="px-6 py-4">
-              ₹{product.price.toLocaleString()}
-            </td>
-
-            <td className="px-6 py-4">
-              {product.stock}
-            </td>
-
-            <td className="px-6 py-4">
-
-              <span
-                className={`px-3 py-1 rounded-full text-sm ${
-                  product.status === "In Stock"
-                    ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
-                }`}
+            <div>
+              <label
+                htmlFor="prod-name"
+                className="block text-sm font-medium text-slate-700 mb-1.5"
               >
-                {product.status}
-              </span>
+                Product Name
+              </label>
+              <input
+                id="prod-name"
+                type="text"
+                placeholder="e.g., Wireless Mouse"
+                value={productName}
+                onChange={(e) => setProductName(e.target.value)}
+                className="w-full border border-slate-300 px-3.5 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                required
+              />
+            </div>
 
-            </td>
-
-            <td className="px-6 py-4">
-
-              <div className="flex justify-center gap-2">
-
-                <button
-                  onClick={() =>
-                    handleEdit(product)
-                  }
-                  className="bg-yellow-500 hover:bg-yellow-600 text-white p-2 rounded-lg"
+            <div>
+              <label
+                htmlFor="prod-category"
+                className="block text-sm font-medium text-slate-700 mb-1.5"
+              >
+                Category
+              </label>
+              {categories.length > 0 ? (
+                <select
+                  id="prod-category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full border border-slate-300 px-3.5 py-2.5 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                  required
                 >
-                  <FaEdit />
-                </button>
+                  <option value="">Select a category</option>
+                  {categories.map((c) => (
+                    <option key={c._id} value={c.categoryName}>
+                      {c.categoryName}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  id="prod-category"
+                  type="text"
+                  placeholder="Enter category name"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full border border-slate-300 px-3.5 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                  required
+                />
+              )}
+            </div>
 
+            <div>
+              <label
+                htmlFor="prod-price"
+                className="block text-sm font-medium text-slate-700 mb-1.5"
+              >
+                Price (₹)
+              </label>
+              <input
+                id="prod-price"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                className="w-full border border-slate-300 px-3.5 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                required
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="prod-stock"
+                className="block text-sm font-medium text-slate-700 mb-1.5"
+              >
+                Stock Quantity
+              </label>
+              <input
+                id="prod-stock"
+                type="number"
+                min="0"
+                placeholder="0"
+                value={stock}
+                onChange={(e) => setStock(e.target.value)}
+                className="w-full border border-slate-300 px-3.5 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                required
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="prod-status"
+                className="block text-sm font-medium text-slate-700 mb-1.5"
+              >
+                Availability Status
+              </label>
+              <select
+                id="prod-status"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full border border-slate-300 px-3.5 py-2.5 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+              >
+                <option value="In Stock">In Stock</option>
+                <option value="Out of Stock">Out of Stock</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-2 flex items-center gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={saving}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition disabled:opacity-60"
+              >
+                {saving
+                  ? "Saving..."
+                  : editId
+                  ? "Update Product"
+                  : "Save Product"}
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="border border-slate-300 text-slate-700 hover:bg-slate-50 px-5 py-2.5 rounded-xl text-sm font-medium transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Search + Table */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-xs p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+          <h2 className="text-lg font-semibold text-slate-900">
+            Product Catalog
+          </h2>
+          <div className="relative w-full sm:w-72">
+            <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+            <input
+              type="text"
+              aria-label="Search products"
+              placeholder="Search by name or category..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3.5 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+            />
+          </div>
+        </div>
+
+        {filteredProducts.length === 0 ? (
+          <EmptyState
+            icon={FaBoxOpen}
+            title="No products found"
+            description={
+              searchTerm
+                ? "Try searching with a different keyword."
+                : "Add your first product to start tracking inventory."
+            }
+            action={
+              !searchTerm && (
                 <button
-                  onClick={() =>
-                    handleDelete(product._id)
-                  }
-                  className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg"
+                  type="button"
+                  onClick={() => setShowForm(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition"
                 >
-                  <FaTrash />
+                  Add Product
                 </button>
+              )
+            }
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
+                  <th className="py-3 pr-4 font-semibold">#</th>
+                  <th className="py-3 pr-4 font-semibold">Product</th>
+                  <th className="py-3 pr-4 font-semibold">Category</th>
+                  <th className="py-3 pr-4 font-semibold">Price</th>
+                  <th className="py-3 pr-4 font-semibold">Stock</th>
+                  <th className="py-3 pr-4 font-semibold">Status</th>
+                  <th className="py-3 text-right font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredProducts.map((product, index) => (
+                  <tr key={product._id} className="hover:bg-slate-50">
+                    <td className="py-3 pr-4 text-slate-500 tabular-nums">
+                      {index + 1}
+                    </td>
+                    <td className="py-3 pr-4 font-medium text-slate-900">
+                      {product.productName}
+                    </td>
+                    <td className="py-3 pr-4 text-slate-600">
+                      {product.category}
+                    </td>
+                    <td className="py-3 pr-4 tabular-nums text-slate-700">
+                      ₹{Number(product.price || 0).toLocaleString()}
+                    </td>
+                    <td className="py-3 pr-4 tabular-nums text-slate-700">
+                      {product.stock}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span
+                        className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          product.status === "In Stock"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-rose-50 text-rose-700"
+                        }`}
+                      >
+                        {product.status}
+                      </span>
+                    </td>
+                    <td className="py-3 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(product)}
+                          aria-label={`Edit ${product.productName}`}
+                          className="p-2 rounded-lg text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 transition"
+                        >
+                          <FaEdit />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(product)}
+                          aria-label={`Delete ${product.productName}`}
+                          className="p-2 rounded-lg text-slate-600 hover:text-rose-600 hover:bg-rose-50 transition"
+                        >
+                          <FaTrash />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
-              </div>
-
-            </td>
-
-          </tr>
-
-        ))}
-
-      </tbody>
-
-    </table>
-
-  </div>
-
-</div>
-```
-
-  </div>
-);
-
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        title="Delete Product"
+        message={`Are you sure you want to delete "${deleteTarget?.productName}"?`}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+        loading={deleting}
+      />
+    </div>
+  );
 };
 
 export default Products;
