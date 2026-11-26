@@ -114,7 +114,7 @@ export const parseInvoicePrompt = async (req, res) => {
 
         parsed = await callGemini({
           systemInstruction:
-            "You extract structured invoice data from natural language. Match products ONLY to productIds from the provided catalog. If the user mentions items NOT in the catalog with prices/quantities (e.g. '4 Chaap costing 160 each'), put them in unmatchedItems and calculate their total in customAmount (e.g. 640). Otherwise set customAmount to 0 and unmatchedItems to [].",
+            "You extract structured invoice data from natural language. Match product names case-insensitively and handle singular/plural or minor variations (e.g., 'mechanical keyboards' -> 'Mechanical Keyboard') using ONLY productIds from the provided catalog. Only if an item truly does not exist in the catalog, put it in unmatchedItems and calculate its total in customAmount. Otherwise set customAmount to 0 and unmatchedItems to [].",
           prompt: `Catalog:\n${catalogContext}\n\nUser request:\n"${prompt}"`,
           responseSchema: schema,
         });
@@ -367,6 +367,13 @@ export const askLedger = async (req, res) => {
       topCustomers,
       topProducts,
       lowStock,
+      products: products.map((p) => ({
+        name: p.productName,
+        category: p.category,
+        price: p.price,
+        stock: p.stock,
+        status: p.status,
+      })),
       categories: [...categoryStats.entries()].map(([name, s]) => ({
         name,
         ...s,
